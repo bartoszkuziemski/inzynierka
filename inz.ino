@@ -1,8 +1,10 @@
 #include <Servo.h>
+#include <SPI.h>
 
 #define ThermistorPin A0 // thermistor analog input
 #define GoodCondPin A1 // good conditions analog input
 #define ServoControlPin 9 // PWM Pin for servo control
+#define DAC_CS_PIN 10 // Chip select pin for DAC
 
 // Temperature read
 float B_Value = 3950;
@@ -18,6 +20,9 @@ float d ;
 float e = 2.718281828 ;
 float ThermistorReadVal = 0;
 
+// DAC control
+int DAC_Val=0;
+
 // Servo control
 int GoodCondReadVal=0; // analog value of good conditions (0-1023)
 Servo myServo;
@@ -26,9 +31,15 @@ bool ServoIsUp=false;
 bool ServoIsDown=false;
 
 void setup() {
-  Serial.begin(9600);
-  myServo.attach(ServoControlPin);
-  pinMode(ServoControlPin, OUTPUT);
+// Servo control
+Serial.begin(9600);
+myServo.attach(ServoControlPin);
+pinMode(ServoControlPin, OUTPUT);
+
+// DAC control
+pinMode(DAC_CS_PIN, OUTPUT);
+digitalWrite(DAC_CS_PIN, HIGH);
+SPI.begin();
 }
 
 void TemperatureRead()
@@ -42,7 +53,7 @@ void TemperatureRead()
   d = c / B_Value ;
   T2 = 1 / (a - d);
 
-// Serial port print to check if values are correct
+//      Serial port print to check if values are correct
 //  Serial.print(R2);
 //  Serial.print("      ");
 //  Serial.print(ThermistorReadVal);
@@ -51,14 +62,29 @@ void TemperatureRead()
 //  Serial.println(" °C");
 }
 
-void loop() {
+void set_DAC_Voltage(int value)
+{
+  byte DAC_Register = 0b00110000;
+  int temp_2byte_value = 0b0000000011111111;
+  byte FirstByte = (value >> 8) | DAC_Register;
+  byte SecondByte = value & temp_2byte_value;
 
-GoodCondReadVal=analogRead(GoodCondPin);
-Serial.println(GoodCondReadVal);
+  noInterrupts();
+  digitalWrite(DAC_CS_PIN, LOW);
+  SPI.transfer(FirstByte);
+  SPI.transfer(SecondByte);
+  digitalWrite(DAC_CS_PIN, HIGH);
+  interrupts();
+}
 
-TemperatureRead();
+float map(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
-if(GoodCondReadVal>512)
+void ServoControl()
+{
+  if(GoodCondReadVal>512)
   {
     ServoIsDown=false;
     if(!ServoIsUp)
@@ -84,6 +110,18 @@ if(GoodCondReadVal>512)
       ServoIsDown=true;
     }
   }
+}
 
+void loop() {
+
+TemperatureRead();
+DAC_Val=map(T2, 273, 373, 0, 4047); // map temperature from 273-373 (0-100 Celsius deg) to 0-4047
+set_DAC_Voltage(DAC_Val);
+// Serial.println(DAC_Val);
+
+GoodCondReadVal=analogRead(GoodCondPin);
+// Serial.println(GoodCondReadVal);
+
+ServoControl();
 
 }
