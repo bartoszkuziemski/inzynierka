@@ -2,8 +2,12 @@
 #include <SPI.h>
 
 #define ThermistorPin A0 // thermistor analog input
-#define GoodCondPin A1 // good conditions analog input
-#define ServoControlPin 9 // PWM Pin for servo control
+#define HeaterAnalogPin A1 // heater analog input from Trend 0-10V
+#define FanAnalogPin A2 // fan analog input from Trend 0-10V
+#define GoodCondPin A3 // good conditions analog input
+#define HeaterPWM_Pin 5
+#define FanPWM_Pin 6
+#define ServoPin_PWM 3
 #define DAC_CS_PIN 10 // Chip select pin for DAC
 
 // Temperature read
@@ -21,25 +25,31 @@ float e = 2.718281828 ;
 float ThermistorReadVal = 0;
 
 // DAC control
-int DAC_Val=0;
+int DAC_Val = 0;
 
 // Servo control
-int GoodCondReadVal=0; // analog value of good conditions (0-1023)
+int GoodCondReadVal = 0; // analog value of good conditions (0-1023)
 Servo myServo;
 int ServoPos = 0; // position of servo
-bool ServoIsUp=false; 
-bool ServoIsDown=false;
+bool ServoIsUp = false;
+bool ServoIsDown = false;
 
 void setup() {
-// Servo control
-Serial.begin(9600);
-myServo.attach(ServoControlPin);
-pinMode(ServoControlPin, OUTPUT);
+  // Servo control
+  Serial.begin(9600);
+  myServo.attach(ServoPin_PWM);
+  pinMode(ServoPin_PWM, OUTPUT);
 
-// DAC control
-pinMode(DAC_CS_PIN, OUTPUT);
-digitalWrite(DAC_CS_PIN, HIGH);
-SPI.begin();
+  // DAC control
+  pinMode(DAC_CS_PIN, OUTPUT);
+  digitalWrite(DAC_CS_PIN, HIGH);
+  SPI.begin();
+
+  // Heater control
+  pinMode(HeaterPWM_Pin, OUTPUT);
+
+  // Fan control
+  pinMode(FanPWM_Pin, OUTPUT);
 }
 
 void TemperatureRead()
@@ -53,13 +63,13 @@ void TemperatureRead()
   d = c / B_Value ;
   T2 = 1 / (a - d);
 
-//      Serial port print to check if values are correct
-//  Serial.print(R2);
-//  Serial.print("      ");
-//  Serial.print(ThermistorReadVal);
-//  Serial.print("      ");
-//  Serial.print(T2 - 273.15);
-//  Serial.println(" °C");
+  //      Serial port print to check if values are correct
+  //  Serial.print(R2);
+  //  Serial.print("      ");
+  //  Serial.print(ThermistorReadVal);
+  //  Serial.print("      ");
+  //  Serial.print(T2 - 273.15);
+  //  Serial.println(" °C");
 }
 
 void set_DAC_Voltage(int value)
@@ -77,51 +87,61 @@ void set_DAC_Voltage(int value)
   interrupts();
 }
 
-float map(float x, float in_min, float in_max, float out_min, float out_max)
+float f_map(float x, float in_min, float in_max, float out_min, float out_max)
 {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 void ServoControl()
 {
-  if(GoodCondReadVal>512)
+  if (GoodCondReadVal > 512)
   {
-    ServoIsDown=false;
-    if(!ServoIsUp)
+    ServoIsDown = false;
+    if (!ServoIsUp)
     {
       for (ServoPos = 0; ServoPos < 90; ServoPos += 1)
       {
         myServo.write(ServoPos);
         delay(50);
       }
-      ServoIsUp=true;
+      ServoIsUp = true;
     }
   }
   else
   {
-    ServoIsUp=false;
-    if(!ServoIsDown)
+    ServoIsUp = false;
+    if (!ServoIsDown)
     {
       for (ServoPos = 90; ServoPos >= 0; ServoPos -= 1)
       {
         myServo.write(ServoPos);
         delay(50);
       }
-      ServoIsDown=true;
+      ServoIsDown = true;
     }
   }
 }
 
+void AnalogToPWM(int analogPin, int PwmPin)
+{
+  int ReadVal = analogRead(analogPin);
+  int PwmVal = map(ReadVal, 0 , 1023, 0 , 255);
+  analogWrite(PwmPin, PwmVal);
+}
+
 void loop() {
+  TemperatureRead();
+  
+  DAC_Val = f_map(T2, 273, 373, 0, 4047); // map temperature from 273-373 (0-100 Celsius deg) to 0-4047
+  set_DAC_Voltage(DAC_Val);
+  // Serial.println(DAC_Val);
 
-TemperatureRead();
-DAC_Val=map(T2, 273, 373, 0, 4047); // map temperature from 273-373 (0-100 Celsius deg) to 0-4047
-set_DAC_Voltage(DAC_Val);
-// Serial.println(DAC_Val);
+  AnalogToPWM(HeaterAnalogPin, HeaterPWM_Pin);
+  AnalogToPWM(FanAnalogPin, FanPWM_Pin);
 
-GoodCondReadVal=analogRead(GoodCondPin);
-// Serial.println(GoodCondReadVal);
+  GoodCondReadVal = analogRead(GoodCondPin);
+  // Serial.println(GoodCondReadVal);
 
-ServoControl();
+  ServoControl();
 
 }
