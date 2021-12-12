@@ -34,6 +34,9 @@ int ServoPos = 0; // position of servo
 bool ServoIsUp = false;
 bool ServoIsDown = false;
 
+// Timer
+int TimerCounter=0;
+
 void setup() {
   // Servo control
   Serial.begin(9600);
@@ -50,6 +53,15 @@ void setup() {
 
   // Fan control
   pinMode(FanPWM_Pin, OUTPUT);
+
+  // Timer
+  cli();                      // stop interrupts for till we make the settings
+  TCCR2A = 0;                 // Reset entire TCCR1A to 0 
+  TCCR2B = 0;                 // Reset entire TCCR1B to 0
+  TCCR2B |= B00000111;        // set the prescalar to value 1024 by changing the CS10 CS12 and CS12 bits
+  TIMSK2 |= B00000010;        // Set OCIE1A to 1 so we enable compare match A 
+  OCR2A = 255;               // Set the value of register A to 255
+  sei();                     // Enable back the interrupts
 }
 
 void TemperatureRead()
@@ -129,6 +141,42 @@ void AnalogToPWM(int analogPin, int PwmPin)
   analogWrite(PwmPin, PwmVal);
 }
 
+ISR(TIMER2_COMPA_vect)
+{
+  TCNT2  = 0;                  // set the timer back to 0 so it resets for next interrupt
+  TimerCounter++;
+  if(TimerCounter>=3)
+  {
+    TimerCounter=0;
+    if(GoodCondReadVal >512)
+    {
+      if(!ServoIsUp)
+      {
+        myServo.write(ServoPos);
+        ServoPos++;
+        if(ServoPos>=90)
+        {
+          ServoIsUp=true;
+          ServoIsDown=false;
+        }
+      }
+    }
+    else
+    {
+      if(!ServoIsDown)
+      {
+        myServo.write(ServoPos);
+        ServoPos--;
+        if(ServoPos<=0)
+        {
+          ServoIsDown=true;
+          ServoIsUp=false;
+        }
+      }
+    }
+  }
+}
+
 void loop() {
   TemperatureRead();
   
@@ -140,8 +188,8 @@ void loop() {
   AnalogToPWM(FanAnalogPin, FanPWM_Pin);
 
   GoodCondReadVal = analogRead(GoodCondPin);
-  // Serial.println(GoodCondReadVal);
+   Serial.println(GoodCondReadVal);
 
-  ServoControl();
+  //ServoControl();
 
 }
