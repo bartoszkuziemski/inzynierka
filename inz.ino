@@ -4,7 +4,7 @@
 #define ThermistorPin A0 // thermistor analog input
 #define HeaterAnalogPin A1 // heater analog input from Trend 0-10V
 #define FanAnalogPin A2 // fan analog input from Trend 0-10V
-#define GoodCondPin A3 // good conditions analog input
+#define GoodCondPin A3  // good conditions analog input
 #define HeaterPWM_Pin 5
 #define FanPWM_Pin 6
 #define ServoPin_PWM 3
@@ -35,7 +35,7 @@ bool ServoIsUp = false;
 bool ServoIsDown = false;
 
 // Timer
-int TimerCounter=0;
+int TimerCounter = 0;
 
 void setup() {
   // Servo control
@@ -56,10 +56,10 @@ void setup() {
 
   // Timer
   cli();                      // stop interrupts for till we make the settings
-  TCCR2A = 0;                 // Reset entire TCCR1A to 0 
+  TCCR2A = 0;                 // Reset entire TCCR1A to 0
   TCCR2B = 0;                 // Reset entire TCCR1B to 0
-  TCCR2B |= B00000111;        // set the prescalar to value 1024 by changing the CS10 CS12 and CS12 bits
-  TIMSK2 |= B00000010;        // Set OCIE1A to 1 so we enable compare match A 
+  TCCR2B |= B00000111;        // set the prescalar to value 1024 by changing the CS10 CS11 and CS12 bits
+  TIMSK2 |= B00000010;        // Set OCIE1A to 1 so we enable compare match A
   OCR2A = 255;               // Set the value of register A to 255
   sei();                     // Enable back the interrupts
 }
@@ -80,8 +80,8 @@ void TemperatureRead()
   //  Serial.print("      ");
   //  Serial.print(ThermistorReadVal);
   //  Serial.print("      ");
-  //  Serial.print(T2 - 273.15);
-  //  Serial.println(" °C");
+    Serial.print(T2 - 273.15);
+    Serial.print(", ");
 }
 
 void set_DAC_Voltage(int value)
@@ -138,39 +138,47 @@ void AnalogToPWM(int analogPin, int PwmPin)
 {
   int ReadVal = analogRead(analogPin);
   int PwmVal = map(ReadVal, 0 , 1023, 0 , 255);
-  analogWrite(PwmPin, PwmVal);
+  if (analogPin = HeaterAnalogPin && T2 >= 373)
+  {
+    analogWrite(PwmPin, 0);
+  }
+  else
+  {
+    analogWrite(PwmPin, PwmVal);
+  }
+  //Serial.println(ReadVal);
 }
 
 ISR(TIMER2_COMPA_vect)
 {
   TCNT2  = 0;                  // set the timer back to 0 so it resets for next interrupt
   TimerCounter++;
-  if(TimerCounter>=3)
+  if (TimerCounter >= 3)
   {
-    TimerCounter=0;
-    if(GoodCondReadVal >512)
+    TimerCounter = 0;
+    if (GoodCondReadVal > 512)
     {
-      if(!ServoIsUp)
+      if (!ServoIsUp)
       {
         myServo.write(ServoPos);
         ServoPos++;
-        if(ServoPos>=90)
+        if (ServoPos >= 90)
         {
-          ServoIsUp=true;
-          ServoIsDown=false;
+          ServoIsUp = true;
+          ServoIsDown = false;
         }
       }
     }
     else
     {
-      if(!ServoIsDown)
+      if (!ServoIsDown)
       {
         myServo.write(ServoPos);
         ServoPos--;
-        if(ServoPos<=0)
+        if (ServoPos <= 0)
         {
-          ServoIsDown=true;
-          ServoIsUp=false;
+          ServoIsDown = true;
+          ServoIsUp = false;
         }
       }
     }
@@ -179,16 +187,16 @@ ISR(TIMER2_COMPA_vect)
 
 void loop() {
   TemperatureRead();
-  
+
   DAC_Val = f_map(T2, 273, 373, 0, 4047); // map temperature from 273-373 (0-100 Celsius deg) to 0-4047
   set_DAC_Voltage(DAC_Val);
-  // Serial.println(DAC_Val);
+  //Serial.println(DAC_Val);
 
   AnalogToPWM(HeaterAnalogPin, HeaterPWM_Pin);
   AnalogToPWM(FanAnalogPin, FanPWM_Pin);
 
   GoodCondReadVal = analogRead(GoodCondPin);
-   Serial.println(GoodCondReadVal);
+  // Serial.println(GoodCondReadVal);
 
   //ServoControl();
 
